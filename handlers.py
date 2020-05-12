@@ -1,13 +1,15 @@
 from telegram.ext import CommandHandler, MessageHandler, Filters, CallbackQueryHandler, run_async
 from telegram import ParseMode, MessageEntity, InlineKeyboardButton, InlineKeyboardMarkup
 from texts import start_text, invalid_link_text, video_default_form, video_with_description_form,\
-    download_started_notification
+    download_started_notification, already_downloading
 from keyboards import default_video_keyboard, back_button, loading_button
 from pytube import YouTube
 import os
 from pytube.exceptions import RegexMatchError
 import subprocess
 from pyro import send_any_video, send_any_audio
+import time
+import random
 
 
 def start_callback(update, context):
@@ -23,11 +25,23 @@ start_handler = CommandHandler('start',
 
 def url_callback(update, context):
     url = update.message.text
+    uid = update.message.chat_id
+
+    if str(uid) in os.listdir():
+        if len(os.listdir('{}/video/'.format(uid))) > 0 or\
+                len(os.listdir('{}/audio/'.format(uid))) > 0 or\
+                len(os.listdir('{}/output/'.format(uid))) > 0:
+
+            context.bot.send_message(update.message.from_user.id,
+                                     already_downloading,
+                                     parse_mode=ParseMode.HTML)
+
+            return
 
     try:
         yt_object = YouTube(url)
 
-    except RegexMatchError:                                         # catch other possible errortypes
+    except RegexMatchError:
 
         context.bot.send_message(update.message.from_user.id,
                                  invalid_link_text,
@@ -40,7 +54,7 @@ def url_callback(update, context):
     views = yt_object.views
     description = yt_object.description
 
-    length_converted = '' + str(int(length) // 60) + ':' + str(int(length) % 60)
+    length_converted = str(int(length) // 60) + ':' + str(int(length) % 60)
 
     download_video_button = InlineKeyboardButton(default_video_keyboard[0],
                                                  callback_data=0)
@@ -49,9 +63,11 @@ def url_callback(update, context):
     show_description_button = InlineKeyboardButton(default_video_keyboard[2],
                                                    callback_data=2)
 
-    keyboard = InlineKeyboardMarkup([[download_video_button],
-                               [download_audio_button],
-                               [show_description_button]])
+    keyboard = InlineKeyboardMarkup([
+        [download_video_button],
+        [download_audio_button],
+        [show_description_button]
+    ])
 
     context.bot.send_message(update.message.from_user.id,
                              video_default_form.format(title,
@@ -59,8 +75,6 @@ def url_callback(update, context):
                                                        views),
                              parse_mode=ParseMode.HTML,
                              reply_markup=keyboard)
-
-    yt_object.prefetch()
 
     context.chat_data['yt_object'] = yt_object
     context.chat_data['title'] = title
@@ -100,7 +114,12 @@ show_description_handler = CallbackQueryHandler(pattern='2',
 
 def back_to_default_callback(update, context):
 
-    title = context.chat_data['title']
+    try:
+        title = context.chat_data['title']
+    except KeyError:
+        context.bot.delete_message(chat_id=update.callback_query.message.chat_id,
+                                   message_id=update.callback_query.message.message_id)
+        return
     duration = context.chat_data['duration']
     views = context.chat_data['views']
 
@@ -131,17 +150,23 @@ back_to_default_handler = CallbackQueryHandler(pattern='-1',
 def download_button_callback(update, context):
 
     yt_object = context.chat_data['yt_object']
+
     audio_streams = yt_object.streams.filter(only_audio=True)
     context.chat_data['audio_streams'] = audio_streams
-    streams = yt_object.streams.filter(only_video=True).all()
+
+    streams = yt_object.streams.filter(only_video=True)
+
     buttons = list()
     for stream in streams:
         mime_type = stream.mime_type.split('/')[1]
+
         resolution = stream.resolution
         if resolution is None:
             continue
+
         size = stream.filesize
         size_converted = round(size / 1000 / 1000, 2)
+
         fps = stream.fps
         n = streams.index(stream)
 
@@ -171,10 +196,10 @@ download_button_handler = CallbackQueryHandler(pattern='0',
 @run_async
 def download_callback(update, context):
     n = int(update.callback_query.data.split(':')[1])
-    uid = update.callback_query.message.from_user.id
+    uid = update.callback_query.message.chat_id
 
     video_stream = context.chat_data['streams'][n]
-    audio_streams = context.chat_data['audio_streams'].all()
+    audio_streams = context.chat_data['audio_streams']
 
     button = InlineKeyboardButton(loading_button, callback_data='NONE')
     kb = InlineKeyboardMarkup([[button]])
@@ -196,7 +221,7 @@ def download_callback(update, context):
         os.mkdir('{}/output'.format(uid))
 
     highest_abr = -1
-    n = -1
+
     if 'webm' in video_stream.mime_type:
         for stream in audio_streams:
             if 'webm' in stream.mime_type:
@@ -212,32 +237,52 @@ def download_callback(update, context):
 
     audio_stream = audio_streams[n]
 
-    video_stream.download('{}/video/'.format(uid))
-    audio_stream.download('{}/audio/'.format(uid))
+    filename_v = str(random.randint(0, 9999999999)) + '.' + video_stream.default_filename.split('.')[-1]
+    filename_a = str(random.randint(0, 9999999999)) + '.' + audio_stream.default_filename.split('.')[-1]
+
+    print('Downloading video...\n')
+    video_stream.download(output_path='{}/video/'.format(uid),
+                          filename=filename_v.split('.')[0])
+    print('Video downloaded.\n')
+
+    print('Downloading audio...\n')
+    audio_stream.download(output_path='{}/audio/'.format(uid),
+                          filename=filename_a.split('.')[0])
+    print('Audio downloaded.\n')
 
     video_path = '{}/video/{}'.format(uid,
-                                      video_stream.default_filename)
+                                      filename_v)
     audio_path = '{}/audio/{}'.format(uid,
-                                      audio_stream.default_filename)
+                                      filename_a)
 
     output_path = '{}/output/{}'.format(uid,
-                                        video_stream.default_filename)
+                                        filename_v)
+
     video_path = os.path.abspath(video_path)
     audio_path = os.path.abspath(audio_path)
     output_path = os.path.abspath(output_path)
 
+    print('Merging files with ffmpeg...')
     cmd = 'ffmpeg -i \"{}\" -i \"{}\" -c copy  \"{}\"'.format(video_path, audio_path, output_path)
-    subprocess.call(cmd, shell=True)
+    try:
+        subprocess.call(cmd, shell=True)
+    except FileNotFoundError:
+        time.sleep(10)
+        subprocess.call(cmd, shell=True)
+    print('Merge completed.')
 
-    if os.path.getsize('{}/output/{}'.format(uid, video_stream.default_filename)) <= 52428800:
+    if os.path.getsize('{}/output/{}'.format(uid, filename_v)) <= 52428800:
+        print('Filesize OK, sending via BotAPI...')
         context.bot.send_video(chat_id=update.callback_query.message.chat_id,
                                video=open('{}/output/{}'.format(uid,
-                                                                video_stream.default_filename), 'rb'),
+                                                                filename_v), 'rb'),
                                width=1920,
                                height=1080,
                                supports_streaming=True,
                                duration=context.chat_data['yt_object'].length)
+        print('File sent.')
     else:
+        print('Filesize not OK, sending via Userbot...')
         message = send_any_video(path=output_path, tag=uid)
         fid = message.video.file_id
 
@@ -247,6 +292,7 @@ def download_callback(update, context):
                                height=1080,
                                supports_streaming=True,
                                duration=context.chat_data['yt_object'].length)
+        print('File sent.')
 
     button = InlineKeyboardButton(back_button,
                                   callback_data=-1)
@@ -325,17 +371,20 @@ def download_audio_callback(update, context):
     if not os.path.exists('{}/audio'.format(uid)):
         os.mkdir('{}/audio'.format(uid))
 
-    stream.download('{}/audio/'.format(uid))
+    filename = str(random.randint(0, 9999999999)) + '.' + stream.default_filename.split('.')[-1]
+
+    stream.download(output_path='{}/audio/'.format(uid),
+                    filename=filename.split('.')[0])
 
     audio_path = '{}/audio/{}'.format(uid,
-                                      stream.default_filename)
+                                      filename)
 
     audio_path = os.path.abspath(audio_path)
 
-    if os.path.getsize('{}/audio/{}'.format(uid, stream.default_filename)) <= 52428800:
+    if os.path.getsize('{}/audio/{}'.format(uid, filename)) <= 52428800:
         context.bot.send_audio(chat_id=update.callback_query.message.chat_id,
                                audio=open('{}/audio/{}'.format(uid,
-                                                               stream.default_filename), 'rb'),
+                                                               filename), 'rb'),
                                title=context.chat_data['yt_object'].title,
                                performer='YTButlerBot')
     else:

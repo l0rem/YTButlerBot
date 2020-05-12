@@ -1,4 +1,3 @@
-
 from decouple import config
 from telegram.ext import Updater
 from handlers import start_handler, url_handler, show_description_handler, back_to_default_handler,\
@@ -9,7 +8,7 @@ import logging
 bot_token = config('BOT_TOKEN')
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                    level=logging.DEBUG)
+                    level=logging.INFO)
 
 logger = logging.getLogger(__name__)
 
