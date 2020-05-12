@@ -1,10 +1,12 @@
 
-from secrets import bot_token
+from decouple import config
 from telegram.ext import Updater
 from handlers import start_handler, url_handler, show_description_handler, back_to_default_handler,\
     download_button_handler, download_callback_handler, download_audio_button_handler, download_audio_callback_handler
 import logging
 
+
+bot_token = config('BOT_TOKEN')
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                     level=logging.DEBUG)

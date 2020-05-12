@@ -1,5 +1,11 @@
 from pyrogram import Client
-from secrets import userbot_api_hash, userbot_api_id, userbot_chat_id, bot_name
+from decouple import config
+
+
+userbot_api_id = config('API_ID')
+userbot_api_hash = config('API_HASH')
+userbot_chat_id = config('USER_ID')
+bot_name = config('BOT_USERNAME')
 
 app = Client('yt_servant',
              api_id=userbot_api_id,
