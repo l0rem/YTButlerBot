@@ -21,13 +21,17 @@ def send_any_video(path, tag):
     print('Userbot started...')
 
     print('Uploading video...')
-    message = app.send_video(chat_id=bot_name,
-                             video=path,
-                             caption=tag,
-                             supports_streaming=True,
-                             progress=progress,
-                             width=1920,
-                             height=1080)
+    try:
+        message = app.send_video(chat_id=bot_name,
+                                 video=path,
+                                 caption=tag,
+                                 supports_streaming=True,
+                                 progress=progress,
+                                 width=1920,
+                                 height=1080)
+    except ValueError:
+        app.stop()
+        return None
     print('Video uploaded.')
    
     app.stop()

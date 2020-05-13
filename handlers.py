@@ -1,7 +1,7 @@
 from telegram.ext import CommandHandler, MessageHandler, Filters, CallbackQueryHandler, run_async
 from telegram import ParseMode, MessageEntity, InlineKeyboardButton, InlineKeyboardMarkup
 from texts import start_text, invalid_link_text, video_default_form, video_with_description_form,\
-    download_started_notification, already_downloading
+    download_started_notification, already_downloading, filesize_too_big
 from keyboards import default_video_keyboard, back_button, loading_button
 from pytube import YouTube
 import os
@@ -284,6 +284,14 @@ def download_callback(update, context):
     else:
         print('Filesize not OK, sending via Userbot...')
         message = send_any_video(path=output_path, tag=uid)
+        if message is None:
+            context.bot.send_message(text=filesize_too_big,
+                                     parse_mode='HTML',
+                                     chat_id=uid)
+
+            back_to_default_callback(update, context)
+
+            return
         fid = message.video.file_id
 
         context.bot.send_video(chat_id=update.callback_query.message.chat_id,
@@ -314,7 +322,7 @@ download_callback_handler = CallbackQueryHandler(pattern='download:(.*)',
 def download_audio_button_callback(update, context):
 
     yt_object = context.chat_data['yt_object']
-    streams = yt_object.streams.filter(only_audio=True).all()
+    streams = yt_object.streams.filter(only_audio=True)
 
     buttons = list()
     for stream in streams:
