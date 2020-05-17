@@ -55,6 +55,14 @@ def url_callback(update, context):
 
         return
 
+    except KeyError:
+
+        context.bot.send_message(update.message.from_user.id,
+                                 invalid_link_text,
+                                 parse_mode=ParseMode.HTML)
+
+        return
+
     title = yt_object.title
     length = yt_object.length
     views = yt_object.views
