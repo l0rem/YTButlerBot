@@ -7,12 +7,16 @@ from pytube import YouTube
 import os
 from pytube.exceptions import RegexMatchError
 import subprocess
+from chattools import store_user
+from dbmodels import Downloads, db, Users
 from pyro import send_any_video, send_any_audio
 import time
 import random
 
 
 def start_callback(update, context):
+
+    store_user(update)
 
     context.bot.send_message(update.message.from_user.id,
                              start_text,
@@ -26,6 +30,8 @@ start_handler = CommandHandler('start',
 def url_callback(update, context):
     url = update.message.text
     uid = update.message.chat_id
+
+    store_user(update)
 
     if str(uid) in os.listdir():
         if len(os.listdir('{}/video/'.format(uid))) > 0 or\
@@ -273,13 +279,14 @@ def download_callback(update, context):
 
     if os.path.getsize('{}/output/{}'.format(uid, filename_v)) <= 52428800:
         print('Filesize OK, sending via BotAPI...')
-        context.bot.send_video(chat_id=update.callback_query.message.chat_id,
-                               video=open('{}/output/{}'.format(uid,
-                                                                filename_v), 'rb'),
-                               width=1920,
-                               height=1080,
-                               supports_streaming=True,
-                               duration=context.chat_data['yt_object'].length)
+        fid = context.bot.send_video(chat_id=update.callback_query.message.chat_id,
+                                     video=open('{}/output/{}'.format(uid,
+                                                                      filename_v), 'rb'),
+                                     width=1920,
+                                     height=1080,
+                                     supports_streaming=True,
+                                     duration=context.chat_data['yt_object'].length).video.file_id
+
         print('File sent.')
     else:
         print('Filesize not OK, sending via Userbot...')
@@ -309,6 +316,15 @@ def download_callback(update, context):
     context.bot.edit_message_reply_markup(update.callback_query.message.chat.id,
                                           update.callback_query.message.message_id,
                                           reply_markup=keyboard)
+
+    with db:
+        Downloads.create(
+            user=Users.get(Users.uid == uid),
+            filename=filename_v,
+            yt_url=context.chat_data['yt_object'].watch_url,
+            file_id=fid,
+            filesize=str(os.path.getsize('{}/output/{}'.format(uid, filename_v)))
+        )
 
     os.remove(video_path)
     os.remove(audio_path)
@@ -362,6 +378,8 @@ def download_audio_callback(update, context):
     n = int(update.callback_query.data.split(':')[1])
     uid = update.callback_query.message.from_user.id
 
+    store_user(update)
+
     stream = context.chat_data['streams'][n]
 
     button = InlineKeyboardButton(loading_button, callback_data='NONE')
@@ -390,11 +408,11 @@ def download_audio_callback(update, context):
     audio_path = os.path.abspath(audio_path)
 
     if os.path.getsize('{}/audio/{}'.format(uid, filename)) <= 52428800:
-        context.bot.send_audio(chat_id=update.callback_query.message.chat_id,
-                               audio=open('{}/audio/{}'.format(uid,
-                                                               filename), 'rb'),
-                               title=context.chat_data['yt_object'].title,
-                               performer='YTButlerBot')
+        fid = context.bot.send_audio(chat_id=update.callback_query.message.chat_id,
+                                     audio=open('{}/audio/{}'.format(uid,
+                                                                     filename), 'rb'),
+                                     title=context.chat_data['yt_object'].title,
+                                     performer='YTButlerBot').audio.file_id
     else:
         message = send_any_audio(path=audio_path, tag=uid)
         fid = message.audio.file_id
@@ -411,6 +429,15 @@ def download_audio_callback(update, context):
     context.bot.edit_message_reply_markup(update.callback_query.message.chat.id,
                                           update.callback_query.message.message_id,
                                           reply_markup=keyboard)
+
+    with db:
+        Downloads.create(
+            user=Users.get(Users.uid == uid),
+            filename=filename,
+            yt_url=context.chat_data['yt_object'].watch_url,
+            file_id=fid,
+            filesize=str(os.path.getsize('{}/audio/{}'.format(uid, filename)))
+        )
 
     os.remove(audio_path)
 
