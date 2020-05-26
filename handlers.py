@@ -304,6 +304,11 @@ def download_callback(update, context):
                                      parse_mode='HTML',
                                      chat_id=uid)
 
+            os.remove(output_path)
+            os.remove(video_path)
+            os.remove(audio_path)
+            os.remove(output_path)
+
             back_to_default_callback(update, context)
 
             return

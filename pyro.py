@@ -29,8 +29,11 @@ def send_any_video(path, tag):
                                  progress=progress,
                                  width=1920,
                                  height=1080)
-    except ValueError:
+    except Exception as e:
+        print(e)
+
         app.stop()
+        
         return None
     print('Video uploaded.')
    
