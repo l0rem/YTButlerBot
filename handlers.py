@@ -174,16 +174,20 @@ def download_button_callback(update, context):
     for stream in streams:
         mime_type = stream.mime_type.split('/')[1]
 
-        resolution = stream.resolution
+        try:
+            resolution = stream.resolution
+            size = stream.filesize
+            fps = stream.fps
+        except Exception as e:
+            print(e)
+            print(context.chat_data['title'])
+            continue
+
         if resolution is None:
             continue
 
-        size = stream.filesize
+        n = streams.index(stream)      
         size_converted = round(size / 1000 / 1000, 2)
-
-        fps = stream.fps
-        n = streams.index(stream)
-
         button_text = resolution + '/' + str(fps) + 'FPS' + ' ' + mime_type.upper() + ' - ' + str(size_converted) + 'Mb'
 
         button = InlineKeyboardButton(text=button_text,
